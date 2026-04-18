@@ -3,10 +3,12 @@ import os
 import time
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 from .core.workflows import LiteratureWorkflows
 from .evaluation.monitoring import AgentMonitor
+from .evaluation.quality_metrics import QualityMetrics
 from .config.settings import settings
 from .tools.literature_search import LiteratureSearcher
 
@@ -14,10 +16,20 @@ load_dotenv()
 
 app = FastAPI(title="Literature Summarization Agent", version="1.0.0")
 
+# 配置CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  # 前端开发服务器地址
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # 初始化组件
 workflows = LiteratureWorkflows()
 monitor = AgentMonitor(port=settings.MONITORING_PORT)
 literature_searcher = LiteratureSearcher()
+quality_evaluator = QualityMetrics()
 
 
 class SummarizeRequest(BaseModel):
@@ -60,6 +72,17 @@ async def summarize_paper(request: SummarizeRequest):
             duration=duration
         )
 
+        # 进行质量评价并反馈到监控
+        if "summary" in result and "paper_content" in result:
+            evaluation = quality_evaluator.evaluate_summary(
+                generated_summary=result["summary"],
+                reference_summary=result.get("reference_summary")
+            )
+            # 将评价结果反馈到监控
+            monitor.log_evaluation_metrics(evaluation)
+            # 将评价结果添加到返回结果中
+            result["evaluation_metrics"] = evaluation
+
         return result
 
     except Exception as e:
@@ -87,10 +110,9 @@ async def batch_summarize(request: BatchSummarizeRequest):
         duration = time.time() - start_time
 
         # 记录平均指标
-        avg_quality = sum(
-            r.get("quality_score", 0) for r in result.get("batch_results", {}).values()
-            if isinstance(r, dict) and "quality_score" in r
-        ) / len(result.get("batch_results", {}))
+        batch_results = result.get("batch_results", {})
+        valid_results = [r for r in batch_results.values() if isinstance(r, dict) and "quality_score" in r]
+        avg_quality = sum(r.get("quality_score", 0) for r in valid_results) / len(valid_results) if valid_results else 0
 
         monitor.log_summary_generation(
             paper_id="batch",
@@ -98,6 +120,22 @@ async def batch_summarize(request: BatchSummarizeRequest):
             quality_score=avg_quality,
             duration=duration
         )
+
+        # 对每篇论文进行质量评价并反馈到监控
+        for paper_id, paper_result in batch_results.items():
+            if isinstance(paper_result, dict) and "summary" in paper_result:
+                evaluation = quality_evaluator.evaluate_summary(
+                    generated_summary=paper_result["summary"],
+                    reference_summary=paper_result.get("reference_summary")
+                )
+                # 将评价结果反馈到监控
+                monitor.log_evaluation_metrics(evaluation)
+                # 将评价结果添加到返回结果中
+                paper_result["evaluation_metrics"] = evaluation
+
+        # 更新返回结果
+        result["total_processed"] = len(batch_results)
+        result["total_failed"] = sum(1 for r in batch_results.values() if isinstance(r, dict) and "error" in r)
 
         return result
 
