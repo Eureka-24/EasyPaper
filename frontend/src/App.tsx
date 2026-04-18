@@ -6,9 +6,10 @@ import { SummaryModal } from './components/SummaryModal';
 import { MetricsPanel } from './components/MetricsPanel';
 import { BatchSummaryPanel } from './components/BatchSummaryPanel';
 import { BatchResultsPanel } from './components/BatchResultsPanel';
+import { HistoryPanel } from './components/HistoryPanel';
 import { apiService } from './services/api';
-import type { Paper, SearchResult, SummaryResult } from './types';
-import { Search, AlertCircle, FileText } from 'lucide-react';
+import type { Paper, SearchResult, SummaryResult, HistoryRecord } from './types';
+import { Search, AlertCircle, FileText, History } from 'lucide-react';
 
 function App() {
   const [, setSearchQuery] = useState('');
@@ -24,6 +25,7 @@ function App() {
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
 
   const [batchResults, setBatchResults] = useState<Record<string, SummaryResult> | null>(null);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
   // 搜索论文
   const handleSearch = useCallback(async (query: string) => {
@@ -95,9 +97,47 @@ function App() {
     setSelectedPapers([]);
   }, []);
 
+  // 从历史记录选择论文
+  const handleSelectFromHistory = useCallback((record: HistoryRecord) => {
+    // 将历史记录转换为摘要结果格式
+    const summaryResult: SummaryResult = {
+      paper_id: record.paper_id,
+      title: record.title,
+      authors: record.authors.split(', '),
+      summary: record.text,
+      summary_type: record.summary_type,
+      quality_score: record.quality_score,
+      processing_time: 0,
+    };
+    setCurrentSummary(summaryResult);
+    setSummaryModalOpen(true);
+    setIsHistoryOpen(false);
+  }, []);
+
+  // 从相似论文推荐选择
+  const handleSelectRelatedPaper = useCallback((record: HistoryRecord) => {
+    handleSelectFromHistory(record);
+  }, [handleSelectFromHistory]);
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       <Header />
+
+      {/* History Toggle Button */}
+      <button
+        onClick={() => setIsHistoryOpen(true)}
+        className="fixed right-4 top-24 z-40 flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 shadow-lg rounded-full hover:shadow-xl transition-shadow"
+      >
+        <History className="w-4 h-4 text-primary-600" />
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">历史记录</span>
+      </button>
+
+      {/* History Panel */}
+      <HistoryPanel
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        onSelectPaper={handleSelectFromHistory}
+      />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Metrics Panel */}
@@ -223,6 +263,7 @@ function App() {
         onClose={() => setSummaryModalOpen(false)}
         summary={currentSummary}
         isLoading={isSummaryLoading}
+        onSelectRelatedPaper={handleSelectRelatedPaper}
       />
     </div>
   );

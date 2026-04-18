@@ -98,3 +98,55 @@ class LongTermMemory:
         table = self.db.open_table(self.table_name)
         results = table.where(f"paper_id = '{paper_id}'").to_list()
         return results
+
+    def get_all_summaries(self, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """获取所有历史摘要记录"""
+        table = self.db.open_table(self.table_name)
+        # 使用pandas进行排序和分页
+        import pandas as pd
+        df = table.to_pandas()
+        if len(df) == 0:
+            return []
+        # 按创建时间倒序排列
+        df = df.sort_values("created_at", ascending=False)
+        # 分页
+        df = df.iloc[offset:offset+limit]
+        return df.to_dict('records')
+
+    def get_recent_summaries(self, days: int = 7, limit: int = 50) -> List[Dict[str, Any]]:
+        """获取最近N天的摘要记录"""
+        from datetime import datetime, timedelta
+        
+        cutoff_date = (datetime.now() - timedelta(days=days)).isoformat()
+        table = self.db.open_table(self.table_name)
+        import pandas as pd
+        df = table.to_pandas()
+        if len(df) == 0:
+            return []
+        # 过滤最近N天的记录
+        df = df[df["created_at"] >= cutoff_date]
+        # 按创建时间倒序排列
+        df = df.sort_values("created_at", ascending=False)
+        # 限制数量
+        df = df.head(limit)
+        return df.to_dict('records')
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """获取记忆库统计信息"""
+        table = self.db.open_table(self.table_name)
+        all_data = table.to_pandas()
+        
+        if len(all_data) == 0:
+            return {
+                "total_papers": 0,
+                "avg_quality_score": 0.0,
+                "summary_type_distribution": {},
+                "recent_activity": []
+            }
+        
+        return {
+            "total_papers": len(all_data),
+            "avg_quality_score": float(all_data["quality_score"].mean()),
+            "summary_type_distribution": all_data["summary_type"].value_counts().to_dict(),
+            "recent_activity": all_data.sort_values("created_at", ascending=False).head(5)[["title", "created_at", "quality_score"]].to_dict("records")
+        }

@@ -1,14 +1,20 @@
-import { X, Clock, Award, FileText, User } from 'lucide-react';
-import type { SummaryResult } from '../types';
+import { useState } from 'react';
+import { X, Clock, Award, FileText, User, MessageCircle, Sparkles } from 'lucide-react';
+import type { SummaryResult, HistoryRecord } from '../types';
+import { ChatPanel } from './ChatPanel';
+import { SimilarPapersPanel } from './SimilarPapersPanel';
 
 interface SummaryModalProps {
   isOpen: boolean;
   onClose: () => void;
   summary: SummaryResult | null;
   isLoading?: boolean;
+  onSelectRelatedPaper?: (paper: HistoryRecord) => void;
 }
 
-export function SummaryModal({ isOpen, onClose, summary, isLoading }: SummaryModalProps) {
+export function SummaryModal({ isOpen, onClose, summary, isLoading, onSelectRelatedPaper }: SummaryModalProps) {
+  const [isChatOpen, setIsChatOpen] = useState(false);
+
   if (!isOpen) return null;
 
   return (
@@ -99,6 +105,36 @@ export function SummaryModal({ isOpen, onClose, summary, isLoading }: SummaryMod
                   </p>
                 </div>
               )}
+
+              {/* Action Buttons */}
+              {!summary.error && (
+                <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <button
+                    onClick={() => setIsChatOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span className="text-sm font-medium">追问讨论</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Similar Papers */}
+              {!summary.error && onSelectRelatedPaper && (
+                <div className="pt-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles className="w-4 h-4 text-primary-600" />
+                    <h4 className="text-sm font-semibold text-gray-900 dark:text-white">
+                      智能推荐
+                    </h4>
+                  </div>
+                  <SimilarPapersPanel
+                    query={summary.summary}
+                    currentPaperId={summary.paper_id}
+                    onSelectPaper={onSelectRelatedPaper}
+                  />
+                </div>
+              )}
             </div>
           ) : (
             <div className="text-center py-12 text-gray-500 dark:text-gray-400">
@@ -107,6 +143,16 @@ export function SummaryModal({ isOpen, onClose, summary, isLoading }: SummaryMod
           )}
         </div>
       </div>
+
+      {/* Chat Panel */}
+      {summary && (
+        <ChatPanel
+          paperId={summary.paper_id}
+          paperTitle={summary.title}
+          isOpen={isChatOpen}
+          onClose={() => setIsChatOpen(false)}
+        />
+      )}
     </div>
   );
 }

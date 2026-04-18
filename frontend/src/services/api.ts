@@ -6,6 +6,12 @@ import type {
   BatchSummarizeRequest,
   BatchSummaryResult,
   Metrics,
+  HistoryResponse,
+  MemoryStatistics,
+  SimilarPapersRequest,
+  SimilarPapersResponse,
+  ChatRequest,
+  ChatResponse,
 } from '../types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8888';
@@ -57,6 +63,42 @@ class ApiService {
   // 获取监控指标
   async getMetrics(): Promise<Metrics> {
     return this.fetch<Metrics>('/metrics');
+  }
+
+  // ==================== 记忆系统API ====================
+
+  // 获取历史记录
+  async getHistory(limit: number = 50, offset: number = 0, days?: number): Promise<HistoryResponse> {
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      offset: offset.toString(),
+    });
+    if (days) {
+      params.append('days', days.toString());
+    }
+    return this.fetch<HistoryResponse>(`/memory/history?${params}`);
+  }
+
+  // 获取记忆库统计
+  async getMemoryStatistics(): Promise<MemoryStatistics> {
+    return this.fetch<MemoryStatistics>('/memory/statistics');
+  }
+
+  // 搜索相似论文
+  async findSimilarPapers(request: SimilarPapersRequest): Promise<SimilarPapersResponse> {
+    const params = new URLSearchParams({
+      query: request.query,
+      limit: (request.limit || 5).toString(),
+    });
+    return this.fetch<SimilarPapersResponse>(`/memory/similar?${params}`);
+  }
+
+  // 与论文对话
+  async chatWithPaper(request: ChatRequest): Promise<ChatResponse> {
+    return this.fetch<ChatResponse>('/chat', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
   }
 }
 
